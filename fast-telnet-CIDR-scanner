@@ -1,0 +1,69 @@
+import ipaddress
+import telnetlib
+import threading
+import time
+from queue import Queue
+
+# Configuration
+CIDR_RANGE = "192.168.0.0/24"
+PORT = 23
+TIMEOUT = 3
+THREAD_COUNT = 100
+
+# Credentials to try
+credentials = [
+    ("admin", "password"),
+    ("root", "root")
+]
+
+# Thread-safe queue
+ip_queue = Queue()
+
+def try_telnet(ip, username, password):
+    try:
+        tn = telnetlib.Telnet(ip, PORT, timeout=TIMEOUT)
+
+        tn.read_until(b"login: ", timeout=TIMEOUT)
+        tn.write(username.encode('ascii') + b"\n")
+        tn.read_until(b"Password: ", timeout=TIMEOUT)
+        tn.write(password.encode('ascii') + b"\n")
+
+        time.sleep(0.5)
+        output = tn.read_very_eager().decode('ascii', errors='ignore')
+
+        if "incorrect" not in output.lower():
+            print(f"[+] SUCCESS: {ip} with {username}:{password}")
+            tn.close()
+            return True
+        tn.close()
+    except Exception as e:
+        pass
+    return False
+
+def worker():
+    while not ip_queue.empty():
+        ip = ip_queue.get()
+        for username, password in credentials:
+            if try_telnet(str(ip), username, password):
+                break
+        ip_queue.task_done()
+
+def main():
+    # Expand CIDR
+    net = ipaddress.IPv4Network(CIDR_RANGE, strict=False)
+    for ip in net.hosts():
+        ip_queue.put(ip)
+
+    # Start threads
+    threads = []
+    for _ in range(THREAD_COUNT):
+        t = threading.Thread(target=worker)
+        t.daemon = True
+        t.start()
+        threads.append(t)
+
+    # Wait for all tasks to complete
+    ip_queue.join()
+
+if __name__ == "__main__":
+    main()
