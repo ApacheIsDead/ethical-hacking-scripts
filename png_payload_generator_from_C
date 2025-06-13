@@ -1,0 +1,28 @@
+dummy_png_header = bytes([
+    0x89, 0x50, 0x4E, 0x47,  # PNG signature
+    0x0D, 0x0A, 0x1A, 0x0A
+])
+
+payload_file = input("Enter raw C file path: ").strip()
+
+shellcode = bytearray()
+
+if payload_file:
+    with open(payload_file, "r") as f:
+        for line in f:
+            line = line.split("//")[0].strip()
+
+        
+            hex_values = [val.strip() for val in line.split(",") if val.strip().startswith("0x")]
+
+            # Convert to actual bytes
+            for val in hex_values:
+                shellcode.append(int(val, 16))
+
+    # Combine header and shellcode
+    with open("stego_payload.png", "wb") as out:
+        out.write(dummy_png_header + shellcode)
+
+    print(f"Done! Wrote {len(shellcode)} shellcode bytes into 'stego_payload.png'.")
+else:
+    print("No input file provided.")
